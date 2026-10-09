@@ -156,7 +156,10 @@ run_lane() {  # $1 gpu
     echo "[lane $gpu] START $task s$seed $(date +%H:%M:%S)"
     (
       cd "$VIEW"
-      export PATH="$HOME/.cache/stub-bin:${PATH}" OMNI_KIT_ACCEPT_EULA=YES PYTHONUNBUFFERED=1
+      # eval_policy.sh runs bare `python`; the Isaac sim venv must own it.
+      # Also prepend the zenity stub so Isaac's crash handler cannot wedge.
+      export PATH="$HOME/.cache/stub-bin:$(dirname "$DEXDOJO_SIM_PYTHON"):${PATH}"
+      export OMNI_KIT_ACCEPT_EULA=YES PYTHONUNBUFFERED=1
       setsid bash "$DEXDOJO_ROOT/scripts/eval_policy.sh" \
         --root_dir "$VIEW" \
         --task_name "$task" \
