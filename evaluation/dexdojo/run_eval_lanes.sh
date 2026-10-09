@@ -41,6 +41,20 @@ done
 GPUS=${GPUS:-0}
 REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 
+# The shared sim venv's editable installs point at /mnt/data/share/... (host
+# layout); DLC pods mount the CPFS at /cpfs — bridge the two (same fix the
+# w0 service applies inside its DLC command).
+mkdir -p /mnt/data
+for item in share xiaoxiong; do
+  link=/mnt/data/$item
+  target=/cpfs/$item
+  if [ -e "$link" ] || [ -L "$link" ]; then
+    [ "$(readlink -f "$link")" = "$target" ] || { echo "[lanes] $link exists but is not $target" >&2; exit 97; }
+  else
+    ln -s "$target" "$link"
+  fi
+done
+
 ALL_TASKS="collect_objects,dual_bottles_pick,hammer_beat,insert_block,retrieve_gap,stack_bowls"
 [[ "$TASKS" == "all" ]] && TASKS=$ALL_TASKS
 
