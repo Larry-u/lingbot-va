@@ -28,8 +28,14 @@ from functools import partial
 
 try:
     from flash_attn_interface import flash_attn_func
-except:
-    from flash_attn import flash_attn_func
+except Exception:
+    try:
+        from flash_attn import flash_attn_func
+    except Exception:
+        # flash-attn is optional: only the "flashattn" mode needs it
+        # ("torch"/"flex" use SDPA / flex_attention). A None placeholder
+        # keeps module import working on envs without the wheel.
+        flash_attn_func = None
 
 __all__ = ['WanTransformer3DModel']
 
