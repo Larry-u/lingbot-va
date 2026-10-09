@@ -24,6 +24,7 @@ import json
 import os
 from pathlib import Path
 
+import numpy as np
 import pyarrow.parquet as pq
 
 
@@ -47,6 +48,7 @@ def convert_task(src: Path, dst: Path, task_text_override=None):
     # ---- per-episode parquet slices --------------------------------------
     data_files = {}  # (chunk_index, file_index) -> parquet path cache
     episode_rows = []
+    episodes_stats_rows = []
     video_map = []   # for extract_latents.py
     cursor = 0
     for e in eps:
@@ -60,7 +62,28 @@ def convert_task(src: Path, dst: Path, task_text_override=None):
         frm, to = e["dataset_from_index"], e["dataset_to_index"]
         assert to - frm == length, (ei, frm, to, length)
         out_parquet = dst / f"data/chunk-000/episode_{ei:06d}.parquet"
-        pq.write_table(table.slice(frm, length), out_parquet)
+        sub = table.slice(frm, length)
+        pq.write_table(sub, out_parquet)
+
+        # real per-episode action stats for meta/episodes_stats.jsonl
+        # (v2.1 loader requires the file; training itself never reads stats)
+        act = np.stack(sub["action"].to_pylist()).astype(np.float64)
+        q = np.quantile(act, [0.01, 0.25, 0.5, 0.75, 0.99], axis=0)
+        episodes_stats_rows.append({
+            "episode_index": ei,
+            "stats": {
+                "action": {
+                    "min": act.min(axis=0).tolist(),
+                    "max": act.max(axis=0).tolist(),
+                    "mean": act.mean(axis=0).tolist(),
+                    "std": act.std(axis=0).tolist(),
+                    "count": [int(act.shape[0])] * act.shape[1],
+                    "q01": q[0].tolist(), "q25": q[1].tolist(),
+                    "q50": q[2].tolist(), "q75": q[3].tolist(),
+                    "q99": q[4].tolist(),
+                }
+            },
+        })
 
         episode_rows.append({
             "episode_index": ei,
@@ -97,6 +120,21 @@ def convert_task(src: Path, dst: Path, task_text_override=None):
             f.write(json.dumps(row) + "\n")
     with (dst / "meta" / "tasks.jsonl").open("w") as f:
         f.write(json.dumps({"task_index": 0, "task": task_text}) + "\n")
+    with (dst / "meta" / "episodes_stats.jsonl").open("w") as f:
+        for row in episodes_stats_rows:
+            f.write(json.dumps(row) + "\n")
+
+    video_keys = [k for k, v in features.items() if v["dtype"] == "video"]
+    # lerobot 0.3.3 checks that every episode's video file exists
+    # (get_episodes_file_paths) even though training only reads latents and
+    # the parquet action column; satisfy the check with empty placeholders.
+    for k in video_keys:
+        cam_dir = dst / "videos" / "chunk-000" / k
+        cam_dir.mkdir(parents=True, exist_ok=True)
+        for e in eps:
+            dummy = cam_dir / f"episode_{e['episode_index']:06d}.mp4"
+            if not dummy.exists():
+                dummy.touch()
 
     v21_info = {
         "codebase_version": "v2.1",
@@ -110,7 +148,7 @@ def convert_task(src: Path, dst: Path, task_text_override=None):
         "fps": info["fps"],
         "splits": {"train": f"0:{len(eps)}"},
         "data_path": "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet",
-        "video_path": None,
+        "video_path": "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4",
         "features": features,
     }
     (dst / "meta" / "info.json").write_text(json.dumps(v21_info, indent=4))
