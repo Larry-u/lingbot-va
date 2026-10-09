@@ -519,6 +519,12 @@ def run(args):
 
     if args.save_root is not None:
         config.save_root = args.save_root
+    if getattr(args, "num_steps", None) is not None:
+        config.num_steps = args.num_steps
+    if getattr(args, "save_interval", None) is not None:
+        config.save_interval = args.save_interval
+    if getattr(args, "resume_from", None) is not None:
+        config.resume_from = args.resume_from
 
     if rank == 0:
         logger.info(f"Using config: {args.config_name}")
@@ -542,6 +548,24 @@ def main():
         type=str,
         default=None,
         help="Root directory for saving checkpoints",
+    )
+    parser.add_argument(
+        "--num-steps",
+        type=int,
+        default=None,
+        help="Override config.num_steps (e.g. for smoke runs).",
+    )
+    parser.add_argument(
+        "--save-interval",
+        type=int,
+        default=None,
+        help="Override config.save_interval (e.g. for smoke runs).",
+    )
+    parser.add_argument(
+        "--resume-from",
+        type=str,
+        default=None,
+        help="Checkpoint dir to resume the transformer weights from.",
     )
 
     args = parser.parse_args()
