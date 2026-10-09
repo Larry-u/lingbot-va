@@ -67,18 +67,77 @@ def get_relative_pose(pose):
     relative_pose = np.concatenate([relative_trans, relative_quat], axis=1)
     return torch.from_numpy(relative_pose)
 
+class LengthBucketBatchSampler(torch.utils.data.Sampler):
+    """Batches only episodes with equal latent-frame counts.
+
+    Episodes vary in length (3-19 latent frames); default_collate cannot
+    stack them. Grouping by exact latent_frame_num needs no padding and no
+    model-side masking; batches are shuffled across and within buckets.
+    """
+
+    def __init__(self, latent_frames: list, batch_size: int, seed: int = 42,
+                 drop_last: bool = False):
+        assert batch_size >= 1
+        self.batch_size = batch_size
+        self.seed = seed
+        self.epoch = 0
+        self.drop_last = drop_last
+        buckets = {}
+        for idx, frames in enumerate(latent_frames):
+            buckets.setdefault(int(frames), []).append(idx)
+        self._buckets = buckets
+        self._n = len(latent_frames)
+
+    def set_epoch(self, epoch: int):
+        self.epoch = epoch
+
+    def __len__(self):
+        if self.drop_last:
+            return sum(len(v) // self.batch_size for v in self._buckets.values())
+        return sum((len(v) + self.batch_size - 1) // self.batch_size
+                   for v in self._buckets.values())
+
+    def __iter__(self):
+        rng = np.random.RandomState(self.seed + self.epoch)
+        batches = []
+        for frames, idxs in self._buckets.items():
+            idxs = list(idxs)
+            rng.shuffle(idxs)
+            for st in range(0, len(idxs), self.batch_size):
+                chunk = idxs[st:st + self.batch_size]
+                if self.drop_last and len(chunk) < self.batch_size:
+                    continue
+                batches.append(chunk)
+        rng.shuffle(batches)
+        return iter(batches)
+
+
+def latent_frame_count(episode_length: int, stride: int = 4) -> int:
+    """latent_frame_num the dataset computes for an episode (see
+    _action_post_process / sample_count in tools_dexdojo)."""
+    n = (episode_length + stride - 1) // stride
+    n = min(n, episode_length)
+    k = (n - 1) // 4
+    return k + 1
+
+
 class MultiLatentLeRobotDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         config,
         num_init_worker=128,
     ):
-        self._datasets = construct_lerobot_multi_processor(config, 
-                                                           num_init_worker, 
+        self._datasets = construct_lerobot_multi_processor(config,
+                                                           num_init_worker,
                                                            )
         self.item_id_to_dataset_id, self.acc_dset_num = (
             self._get_item_id_to_dataset_id()
         )
+        self.latent_frames = [
+            latent_frame_count(meta["end_frame"] - meta["start_frame"])
+            for dset in self._datasets
+            for meta in dset.new_metas
+        ]
 
     def __len__(
         self,

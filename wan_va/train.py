@@ -73,19 +73,32 @@ class Trainer:
         # init can deadlock (workers inherit locked driver state).
         logger.info("Setting up datasets...")
         train_dataset = MultiLatentLeRobotDataset(config=config)
-        train_sampler = DistributedSampler(
-            train_dataset,
-            num_replicas=config.world_size,
-            rank=config.rank,
-            shuffle=True,
-            seed=42
-        ) if config.world_size > 1 else None
+        if config.world_size > 1:
+            train_sampler = DistributedSampler(
+                train_dataset,
+                num_replicas=config.world_size,
+                rank=config.rank,
+                shuffle=True,
+                seed=42
+            )
+            batch_sampler = None
+        elif config.batch_size > 1:
+            # episodes have variable latent-frame counts; only equal-length
+            # episodes can be collated, so batch within length buckets
+            from dataset.lerobot_latent_dataset import LengthBucketBatchSampler
+            batch_sampler = LengthBucketBatchSampler(
+                train_dataset.latent_frames, config.batch_size, seed=42)
+            train_sampler = None
+        else:
+            train_sampler = None
+            batch_sampler = None
         self.train_loader = DataLoader(
             train_dataset,
-            batch_size=config.batch_size,
-            shuffle=(train_sampler is None),
+            batch_size=(1 if batch_sampler is not None else config.batch_size),
+            shuffle=(train_sampler is None and batch_sampler is None),
             num_workers=config.load_worker,
             sampler=train_sampler,
+            batch_sampler=batch_sampler,
         )
 
         # Load models
@@ -163,6 +176,10 @@ class Trainer:
             # Reset sampler and iterator when epoch finishes
             if hasattr(self.train_loader.sampler, 'set_epoch'):
                 self.train_loader.sampler.set_epoch(self.train_loader.sampler.epoch + 1)
+            elif (self.train_loader.batch_sampler is not None
+                  and hasattr(self.train_loader.batch_sampler, 'set_epoch')):
+                self.train_loader.batch_sampler.set_epoch(
+                    self.train_loader.batch_sampler.epoch + 1)
             self.train_loader_iter = iter(self.train_loader)
             batch = next(self.train_loader_iter)
         
