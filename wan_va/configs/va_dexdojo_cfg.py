@@ -12,7 +12,17 @@ from .shared_config import va_shared_cfg
 va_dexdojo_cfg = EasyDict(__name__='Config: VA dexdojo')
 va_dexdojo_cfg.update(va_shared_cfg)
 
-va_dexdojo_cfg.wan22_pretrained_model_name_or_path = "/root/nas/yuxianggang/weights/lingbot-va-base-dexdojo54"
+va_dexdojo_cfg.infer_mode = 'server'
+# eval lanes run one GPU (5090-32G) per policy server; offload VAE and
+# text encoder to CPU like the RoboTwin deployment (~24G resident)
+va_dexdojo_cfg.enable_offload = True
+
+import json as _json
+import os as _os
+
+va_dexdojo_cfg.wan22_pretrained_model_name_or_path = _os.environ.get(
+    'LINGBOT_DEXDOJO_MODEL',
+    '/root/nas/yuxianggang/weights/lingbot-va-base-dexdojo54')
 
 va_dexdojo_cfg.attn_window = 72
 va_dexdojo_cfg.frame_chunk_size = 2
@@ -51,9 +61,6 @@ va_dexdojo_cfg.action_norm_method = 'quantiles'
 # set LINGBOT_DEXDOJO_STATS=/path/to/norm_stats.json to override the default.
 # If the file is absent at import time a placeholder is installed and any
 # actual dexdojo use fails fast (see _norm_stat_placeholder consumers).
-import json as _json
-import os as _os
-
 _norm_stat_path = _os.environ.get(
     'LINGBOT_DEXDOJO_STATS',
     '/root/nas/yuxianggang/data/dexdojo_lerobot_v21/norm_stats.json')
