@@ -287,7 +287,11 @@ class LatentLeRobotDataset(LeRobotDataset):
         action_aligned = rearrange(action_aligned, "(f n) c -> c f n 1", f=latent_frame_num)
         action_mask_aligned = rearrange(action_mask_aligned, "(f n) c -> c f n 1", f=latent_frame_num)
         action_aligned *= action_mask_aligned
-        return torch.from_numpy(action_aligned).float(), torch.from_numpy(action_mask_aligned).bool()
+        # np.ascontiguousarray: from_numpy alone shares the numpy buffer and
+        # default_collate fails with "Trying to resize storage that is not
+        # resizable" for batch_size > 1
+        return (torch.from_numpy(np.ascontiguousarray(action_aligned)).float(),
+                torch.from_numpy(np.ascontiguousarray(action_mask_aligned)).bool())
 
     def __getitem__(self, idx) -> dict:
         idx = idx % len(self.new_metas)
@@ -310,7 +314,7 @@ class LatentLeRobotDataset(LeRobotDataset):
 
         out_dict['actions'], out_dict['actions_mask'] = self._action_post_process(local_start_frame, local_end_frame, latent_frame_ids, ori_data_dict['action'])
 
-        out_dict['latents'] = out_dict['latents'].permute(3, 0, 1, 2)
+        out_dict['latents'] = out_dict['latents'].permute(3, 0, 1, 2).contiguous()
         return out_dict
 
     def __len__(self):
