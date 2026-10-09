@@ -92,18 +92,33 @@ def decode_task_cam(src_root: Path, cam: str, episodes: list, stride: int,
 @torch.no_grad()
 def encode_episode(vae_wrapper, vae, frames_per_cam: dict, cam_keys: list,
                    height: int, width: int, device, dtype):
-    """frames_per_cam: {cam: [T,H,W,3] uint8} -> {cam: latent [f*h*w, c]}"""
-    videos = []
-    for cam in cam_keys:
-        arr = np.stack(frames_per_cam[cam])  # T,H,W,3
+    """frames_per_cam: {cam: [T,H,W,3] uint8} -> {cam: latent [f*h*w, c]}.
+
+    The Wan2.2 causal VAE cannot take a long clip from an empty cache
+    (T>=3 fails with a residual shape mismatch): it must be streamed —
+    first frame alone, then the remaining (T-1, a multiple of 4) frames.
+    This mirrors wan_va_server at inference (initial frame in _infer,
+    keyframes in _compute_kv_cache). Chunk-boundary choice only perturbs
+    latents at bf16 numeric-jitter level (measured mean ~0.08% of latent
+    std), so a single follow-up chunk is used for speed.
+    """
+    def prep(frames):
+        arr = np.stack(frames)  # T,H,W,3
         t = torch.from_numpy(arr).float().permute(3, 0, 1, 2)  # 3,T,H,W
         # match wan_va_server._encode_obs: 4D bilinear over (H,W) first,
         # then add the batch dim
         t = F.interpolate(t, size=(height, width),
                           mode="bilinear", align_corners=False).unsqueeze(0)
-        videos.append(t)
-    videos = torch.cat(videos, dim=0).to(device).to(dtype) / 255.0 * 2.0 - 1.0
-    enc = vae_wrapper.encode_chunk(videos)
+        return t
+
+    vae_wrapper.clear_cache()
+    first = (torch.cat([prep(frames_per_cam[c][:1]) for c in cam_keys], dim=0)
+             .to(device).to(dtype) / 255.0 * 2.0 - 1.0)
+    rest = (torch.cat([prep(frames_per_cam[c][1:]) for c in cam_keys], dim=0)
+            .to(device).to(dtype) / 255.0 * 2.0 - 1.0)
+    enc_first = vae_wrapper.encode_chunk(first)
+    enc_rest = vae_wrapper.encode_chunk(rest)
+    enc = torch.cat([enc_first, enc_rest], dim=2)
     mu, _ = torch.chunk(enc, 2, dim=1)
     latents_mean = torch.tensor(vae.config.latents_mean).to(mu.device)
     latents_std = torch.tensor(vae.config.latents_std).to(mu.device)
