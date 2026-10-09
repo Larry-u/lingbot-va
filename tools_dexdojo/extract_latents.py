@@ -97,8 +97,10 @@ def encode_episode(vae_wrapper, vae, frames_per_cam: dict, cam_keys: list,
     for cam in cam_keys:
         arr = np.stack(frames_per_cam[cam])  # T,H,W,3
         t = torch.from_numpy(arr).float().permute(3, 0, 1, 2)  # 3,T,H,W
-        t = F.interpolate(t.unsqueeze(0), size=(height, width),
-                          mode="bilinear", align_corners=False)
+        # match wan_va_server._encode_obs: 4D bilinear over (H,W) first,
+        # then add the batch dim
+        t = F.interpolate(t, size=(height, width),
+                          mode="bilinear", align_corners=False).unsqueeze(0)
         videos.append(t)
     videos = torch.cat(videos, dim=0).to(device).to(dtype) / 255.0 * 2.0 - 1.0
     enc = vae_wrapper.encode_chunk(videos)
