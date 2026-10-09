@@ -20,7 +20,7 @@
 #          [--base-port 21000] [--extra-sim-args "..."]
 set -uo pipefail
 
-CKPT="" OUT="" TASKS="all" NUM=50 SEEDS="0,1,2" GPUS="" BASE_PORT=21000 EXTRA_SIM_ARGS=""
+CKPT="" OUT="" TASKS="all" NUM=50 SEEDS="0,1,2" GPUS="" BASE_PORT=21000 EXTRA_SIM_ARGS="" SERVER_GPUS=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     --ckpt) CKPT=$2; shift 2;;
@@ -29,6 +29,7 @@ while [[ $# -gt 0 ]]; do
     --num) NUM=$2; shift 2;;
     --seeds) SEEDS=$2; shift 2;;
     --gpus) GPUS=$2; shift 2;;
+    --server-gpus) SERVER_GPUS=$2; shift 2;;
     --base-port) BASE_PORT=$2; shift 2;;
     --extra-sim-args) EXTRA_SIM_ARGS=$2; shift 2;;
     *) echo "[lanes] unknown arg $1"; exit 1;;
@@ -134,10 +135,10 @@ wait_bridge() {  # $1 port  $2 label  (no HTTP healthz; poll TCP)
   echo "[lanes] TIMEOUT waiting for $2 on :$1"; return 1
 }
 
-run_lane() {  # $1 gpu
-  local gpu=$1 i=0
-  local sport=$((BASE_PORT + gpu)) bport=$((BASE_PORT + 1000 + gpu))
-  start_server "$gpu" "$sport"
+run_lane() {  # $1 gpu  $2 lane_idx  $3 server_gpu
+  local gpu=$1 lane_idx=$2 server_gpu=${3:-$1}
+  local sport=$((BASE_PORT + lane_idx)) bport=$((BASE_PORT + 1000 + lane_idx))
+  start_server "$server_gpu" "$sport"
   if ! wait_port "$sport" "server(gpu$gpu)"; then return 1; fi
   # vae/tokenizer/text_encoder symlinks into the ckpt
   for sub in vae tokenizer text_encoder; do
@@ -182,8 +183,13 @@ run_lane() {  # $1 gpu
 }
 
 IFS=',' read -ra GPU_LIST <<< "$GPUS"
-for g in "${GPU_LIST[@]}"; do
-  run_lane "$g" &
+if [[ -n "$SERVER_GPUS" ]]; then
+  IFS=',' read -ra SERVER_LIST <<< "$SERVER_GPUS"
+else
+  SERVER_LIST=()
+fi
+for i in "${!GPU_LIST[@]}"; do
+  run_lane "${GPU_LIST[$i]}" "$i" "${SERVER_LIST[$i]:-}" &
   sleep 15   # stagger lane starts (init contention)
 done
 wait
