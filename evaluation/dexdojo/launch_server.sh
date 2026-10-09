@@ -20,6 +20,16 @@ MODEL_PATH=${MODEL_PATH:?set MODEL_PATH to the SFT checkpoint dir}
 export LINGBOT_DEXDOJO_MODEL=$MODEL_PATH
 export LINGBOT_DEXDOJO_STATS=${LINGBOT_DEXDOJO_STATS:?set LINGBOT_DEXDOJO_STATS to norm_stats.json}
 
+# SFT checkpoints only carry transformer/; the server also needs the VAE /
+# tokenizer / text_encoder from the base — symlink them in when absent
+BASE_DIR=${LINGBOT_DEXDOJO_BASE:-$(dirname "$MODEL_PATH")/lingbot-va-base-dexdojo54}
+for sub in vae tokenizer text_encoder; do
+  if [ ! -e "$MODEL_PATH/$sub" ] && [ -e "$BASE_DIR/$sub" ]; then
+    ln -s "$BASE_DIR/$sub" "$MODEL_PATH/$sub"
+    echo "[launch] symlinked $sub from $BASE_DIR"
+  fi
+done
+
 # training checkpoints carry attn_mode=flex which breaks inference
 if grep -q '"attn_mode": *"flex"' "$MODEL_PATH/transformer/config.json"; then
   sed -i 's/"attn_mode": *"flex"/"attn_mode": "torch"/' \
