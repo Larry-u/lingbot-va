@@ -51,11 +51,13 @@ def decode_task_cam(src_root: Path, cam: str, episodes: list, stride: int,
         path = src_root / "videos" / cam / f"chunk-{chunk_idx:03d}" / f"file-{file_idx:03d}.mp4"
         container = av.open(str(path))
         stream = container.streams.video[0]
-        eps_sorted = sorted(eps_in_file, key=lambda e: e["from_timestamp"])
+        eps_sorted = sorted(
+            eps_in_file, key=lambda e: e["videos"][cam]["from_timestamp"])
         # frame ranges from timestamps; validated against cumulative length
         bounds = []
         for e in eps_sorted:
-            start = int(round(e["from_timestamp"] * stream.average_rate))
+            v = e["videos"][cam]
+            start = int(round(v["from_timestamp"] * stream.average_rate))
             bounds.append((start, start + e["length"], e["episode_index"]))
         for i in range(len(bounds) - 1):
             assert bounds[i][1] <= bounds[i + 1][0] + 1, (cam, bounds[i], bounds[i + 1])
