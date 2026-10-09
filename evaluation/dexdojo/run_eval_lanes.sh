@@ -97,6 +97,7 @@ trap cleanup EXIT
 start_server() {  # $1 gpu  $2 port
   nohup bash -c "cd '$REPO' && CUDA_VISIBLE_DEVICES=$1 TOKENIZERS_PARALLELISM=false \
   PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+  HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
   LINGBOT_DEXDOJO_MODEL='$CKPT' LINGBOT_DEXDOJO_STATS='$LINGBOT_DEXDOJO_STATS' \
   LINGBOT_DEXDOJO_BASE='$BASE_MODEL_PATH' \
   exec '$LINGBOT_PYTHON' -m wan_va.wan_va_server \
@@ -138,14 +139,14 @@ wait_bridge() {  # $1 port  $2 label  (no HTTP healthz; poll TCP)
 run_lane() {  # $1 gpu  $2 lane_idx  $3 server_gpu
   local gpu=$1 lane_idx=$2 server_gpu=${3:-$1}
   local sport=$((BASE_PORT + lane_idx)) bport=$((BASE_PORT + 1000 + lane_idx))
-  start_server "$server_gpu" "$sport"
-  if ! wait_port "$sport" "server(gpu$gpu)"; then return 1; fi
-  # vae/tokenizer/text_encoder symlinks into the ckpt
+  # ckpt must be servable BEFORE the server starts: link the base's
+  # vae/tokenizer/text_encoder in and flip attn_mode to torch
   for sub in vae tokenizer text_encoder; do
     [[ -e "$CKPT/$sub" ]] || ln -s "$BASE_MODEL_PATH/$sub" "$CKPT/$sub"
   done
-  # flip attn_mode to torch for inference
   sed -i 's/"attn_mode": *"flex"/"attn_mode": "torch"/' "$CKPT/transformer/config.json" 2>/dev/null || true
+  start_server "$server_gpu" "$sport"
+  if ! wait_port "$sport" "server(gpu$gpu)"; then return 1; fi
   start_bridge "$gpu" "$bport" "$sport"
   if ! wait_bridge "$bport" "bridge(gpu$gpu)"; then return 1; fi
 
