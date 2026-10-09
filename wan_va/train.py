@@ -68,6 +68,26 @@ class Trainer:
         self.dtype = config.param_dtype
         self.patch_size = config.patch_size
 
+        # Setup dataloaders BEFORE any CUDA context exists: the dataset
+        # builder forks a multiprocessing Pool, and forking after CUDA/NCCL
+        # init can deadlock (workers inherit locked driver state).
+        logger.info("Setting up datasets...")
+        train_dataset = MultiLatentLeRobotDataset(config=config)
+        train_sampler = DistributedSampler(
+            train_dataset,
+            num_replicas=config.world_size,
+            rank=config.rank,
+            shuffle=True,
+            seed=42
+        ) if config.world_size > 1 else None
+        self.train_loader = DataLoader(
+            train_dataset,
+            batch_size=config.batch_size,
+            shuffle=(train_sampler is None),
+            num_workers=config.load_worker,
+            sampler=train_sampler,
+        )
+
         # Load models
         logger.info("Loading models...")
 
@@ -117,23 +137,7 @@ class Trainer:
         self.lr_scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, 
             lr_lambda=lambda step: warmup_constant_lambda(step, warmup_steps=config.warmup_steps))
 
-        # Setup dataloaders
-        logger.info("Setting up datasets...")
-        train_dataset = MultiLatentLeRobotDataset(config=config)
-        train_sampler = DistributedSampler(
-            train_dataset,
-            num_replicas=config.world_size,
-            rank=config.rank,
-            shuffle=True,
-            seed=42
-        ) if config.world_size > 1 else None
-        self.train_loader = DataLoader(
-            train_dataset,
-            batch_size=config.batch_size,
-            shuffle=(train_sampler is None), 
-            num_workers=config.load_worker,
-            sampler=train_sampler,
-        )
+        # (dataloaders were constructed before model load — see above)
 
         self.train_scheduler_latent = FlowMatchScheduler(shift=self.config.snr_shift, sigma_min=0.0, extra_one_step=True)
         self.train_scheduler_latent.set_timesteps(1000, training=True)
