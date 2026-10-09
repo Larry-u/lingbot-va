@@ -55,12 +55,18 @@ def main():
             if any(k.startswith(p) or k == p for p in ACTION_HEAD_KEYS) or \
                any("." + p + "." in k for p in ACTION_HEAD_KEYS):
                 new_shape = list(v.shape)
+                changed = False
                 if new_shape[0] == old_dim:
                     new_shape[0] = args.action_dim
+                    changed = True
                 elif new_shape[-1] == old_dim:
                     new_shape[-1] = args.action_dim
-                else:
-                    raise RuntimeError(f"unexpected shape {v.shape} for {k}")
+                    changed = True
+                if not changed:
+                    # e.g. action_embedder.bias [inner_dim] — shape does not
+                    # depend on action_dim; keep the pretrained value.
+                    new_sd[k] = v
+                    continue
                 nv = torch.empty(new_shape, dtype=v.dtype)
                 torch.manual_seed(args.seed + hash(k) % 10000)
                 fan_in = nv.reshape(-1, nv.shape[-1]).shape[-1] \
