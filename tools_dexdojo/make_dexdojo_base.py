@@ -47,6 +47,10 @@ def main():
 
     torch.manual_seed(args.seed)
 
+    for index_file in t_src.glob("*.index.json"):
+        shutil.copy(index_file, t_dst / index_file.name)
+        print(f"[surgery] copied index {index_file.name}")
+
     for shard in shards:
         sd = load_file(str(shard))
         new_sd = {}
