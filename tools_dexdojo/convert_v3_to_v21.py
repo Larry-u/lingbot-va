@@ -77,7 +77,7 @@ def convert_task(src: Path, dst: Path, task_text_override=None):
                     "max": act.max(axis=0).tolist(),
                     "mean": act.mean(axis=0).tolist(),
                     "std": act.std(axis=0).tolist(),
-                    "count": [int(act.shape[0])] * act.shape[1],
+                    "count": [int(act.shape[0])],
                     "q01": q[0].tolist(), "q25": q[1].tolist(),
                     "q50": q[2].tolist(), "q75": q[3].tolist(),
                     "q99": q[4].tolist(),
