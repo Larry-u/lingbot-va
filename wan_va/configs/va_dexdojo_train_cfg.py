@@ -10,16 +10,16 @@ va_dexdojo_train_cfg.dataset_path = '/root/nas/yuxianggang/data/dexdojo_lerobot_
 va_dexdojo_train_cfg.empty_emb_path = os.path.join(va_dexdojo_train_cfg.dataset_path, 'empty_emb.pt')
 va_dexdojo_train_cfg.enable_wandb = False
 va_dexdojo_train_cfg.load_worker = 8
-va_dexdojo_train_cfg.save_interval = 2000
+va_dexdojo_train_cfg.save_interval = 1000
 va_dexdojo_train_cfg.gc_interval = 50
 va_dexdojo_train_cfg.cfg_prob = 0.1
 
-# Training parameters (1x B200-180G: batch 4 x grad-accum 8 -> GBS 32)
+# Training parameters (1x B200-180G: batch 8 x grad-accum 2 -> GBS 16)
 va_dexdojo_train_cfg.learning_rate = 1e-5
 va_dexdojo_train_cfg.beta1 = 0.9
 va_dexdojo_train_cfg.beta2 = 0.95
 va_dexdojo_train_cfg.weight_decay = 0.1
 va_dexdojo_train_cfg.warmup_steps = 100
 va_dexdojo_train_cfg.batch_size = 8
-va_dexdojo_train_cfg.gradient_accumulation_steps = 4
+va_dexdojo_train_cfg.gradient_accumulation_steps = 2
 va_dexdojo_train_cfg.num_steps = 10000
