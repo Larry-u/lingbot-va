@@ -43,6 +43,11 @@ class VA_Server:
     def __init__(self, job_config):
         self.cache_name = 'pos'
         self.job_config = job_config
+        if getattr(job_config, '_norm_stat_placeholder', False):
+            raise RuntimeError(
+                "dexdojo norm_stat is a placeholder: run "
+                "tools_dexdojo/calc_norm_stats.py and point "
+                "LINGBOT_DEXDOJO_STATS at the resulting norm_stats.json")
         self.save_root = job_config.save_root
         self.dtype = job_config.param_dtype
         self.device = torch.device(f"cuda:{job_config.local_rank}")

@@ -144,6 +144,11 @@ class LatentLeRobotDataset(LeRobotDataset):
         self.latent_path = Path(repo_id) / 'latents'
         self.empty_emb = torch.load(config.empty_emb_path, weights_only=False)
         self.config = config
+        if getattr(config, '_norm_stat_placeholder', False):
+            raise RuntimeError(
+                "dexdojo norm_stat is a placeholder: run "
+                "tools_dexdojo/calc_norm_stats.py and point "
+                "LINGBOT_DEXDOJO_STATS at the resulting norm_stats.json")
         self.cfg_prob = config.cfg_prob
         self.used_video_keys = config.obs_cam_keys
         self.q01 = np.array(config.norm_stat['q01'], dtype='float')[None]
