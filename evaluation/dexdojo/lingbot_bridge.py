@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import inspect
 import os
 import subprocess
 import sys
@@ -93,7 +94,15 @@ def main() -> int:
     info = model.wait_server(timeout_s=args.server_wait)
     print(f"[bridge] server_info: {info}", flush=True)
     print(f"[bridge] listening on {args.host}:{args.port}", flush=True)
-    server = PolicyServer(model, PolicyServerConfig(host=args.host, port=args.port))
+    # no websocket keepalive: Isaac's synchronous scene setup can stall the
+    # sim for minutes; default 20s ping would have the bridge close the
+    # connection mid-episode
+    cfg_kwargs = {"host": args.host, "port": args.port}
+    config_params = set(inspect.signature(PolicyServerConfig).parameters)
+    for extra in ("ws_ping_interval_s", "ws_ping_timeout_s"):
+        if extra in config_params:
+            cfg_kwargs[extra] = None
+    server = PolicyServer(model, PolicyServerConfig(**cfg_kwargs))
     asyncio.run(server.serve_forever())
     return 0
 
