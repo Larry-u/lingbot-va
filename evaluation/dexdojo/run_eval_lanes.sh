@@ -205,7 +205,10 @@ run_lane() {  # $1 gpu  $2 lane_idx  $3 server_gpu
       # pyarrow.vendored (breaks pandas -> open3d imports); an older wheel
       # on PYTHONPATH shadows it cleanly.
       export PATH="$HOME/.cache/stub-bin:$(dirname "$DEXDOJO_SIM_PYTHON"):${PATH}"
-      export PYTHONPATH="$EVAL_ROOT/sim_pyarrow_fix:${PYTHONPATH:-}"
+      # the view must win module resolution: the patched vitra_w0 deploy and
+      # the num_envs=1 env_cfg live there (script-dir/cwd alone don't put it
+      # first); the pyarrow shadow fixes the sim venv's broken pyarrow 25
+      export PYTHONPATH="$VIEW:$EVAL_ROOT/sim_pyarrow_fix:${PYTHONPATH:-}"
       export OMNI_KIT_ACCEPT_EULA=YES PYTHONUNBUFFERED=1
       setsid bash "$DEXDOJO_ROOT/scripts/eval_policy.sh" \
         --root_dir "$VIEW" \
