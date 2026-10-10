@@ -220,12 +220,20 @@ class LingbotRemoteModel:
         env = self._envs.get(env_idx)
         if env is None:
             env = self._envs[env_idx] = _EnvState()
+        # the patched vitra_w0 driver attaches the 4-step-cadence keyframes
+        # to the chunk-boundary obs: the stock model_client swallows per-step
+        # update_obs client-side, so this is the only channel they can
+        # arrive on. The kv state stays env.full_chunk (the FULL server
+        # chunk incl. the skipped frame-0 rows; the driver's echo would be
+        # the trimmed rows only).
+        obs.pop("lingbot_prev_chunk", None)
+        kfs = obs.pop("lingbot_keyframes", None)
+        if kfs:
+            env.keyframes.extend(format_obs(k) for k in kfs)
         env.latest_obs = obs
         if env.full_chunk is None:
             return  # pre-first-chunk obs (also the first_obs source)
         env.obs_since_chunk += 1
-        if env.obs_since_chunk % ACTIONS_PER_VIDEO_FRAME == 0:
-            env.keyframes.append(format_obs(obs))
 
     def _chunk_rows_env(self, env: _EnvState):
         self._connect()

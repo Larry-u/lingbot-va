@@ -35,8 +35,8 @@ class FakeClient:
         return {"action": np.random.randn(54, 2, 16).astype(np.float32)}
 
 
-def obs(step, env_idx=0):
-    return {
+def obs(step, env_idx=0, keyframes=None):
+    o = {
         "env_idx": env_idx,
         "instruction": "test task",
         "vision": {
@@ -47,22 +47,29 @@ def obs(step, env_idx=0):
         "layout_id": 3,
         "action_index": step,
     }
+    if keyframes is not None:
+        o["lingbot_keyframes"] = keyframes
+    return o
 
 
 def run_episode(model, chunks):
+    """Mirror the patched vitra_w0 driver: keyframes attach to the
+    chunk-boundary obs; per-step update_obs never reach the model."""
     model.reset()
     step = 0
+    pending_kfs = None
     for c in range(chunks):
-        model.update_obs(obs(step))  # pre-chunk obs at loop top
+        model.update_obs(obs(step, keyframes=pending_kfs))
         rows = model.get_action()
         R = len(rows)
         assert all(isinstance(r, dict) and sum(len(v) for v in r.values()) == 54
                    for r in rows)
+        kfs = []
         for r in range(R):
             step += 1
-            if r < R - 1:  # driver skips the push after the final row
-                model.update_obs(obs(step))
-        # loop top pushes the final obs before the next get_action
+            if (r + 1) % 4 == 0:
+                kfs.append(obs(step))
+        pending_kfs = kfs or None
     return step
 
 

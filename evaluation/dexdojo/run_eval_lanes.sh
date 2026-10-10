@@ -81,6 +81,32 @@ cp "$DEXDOJO_ROOT"/env_cfg/sim/*.yml "$VIEW/env_cfg/sim/"
 sed -i 's/num_envs: *[0-9]*/num_envs: 1/' "$VIEW"/env_cfg/sim/*.yml
 echo "[lanes] env_cfg num_envs forced to 1 in $VIEW/env_cfg/sim"
 
+# ---- view-scoped vitra_w0 driver override: the stock deploy relies on
+# per-step update_obs reaching the model, but model_client swallows them
+# client-side; our patched driver ships 4-step-cadence keyframes with the
+# chunk-boundary obs instead ---------------------------------------------------
+if [ -L "$VIEW/XPolicyLab" ]; then
+  rm "$VIEW/XPolicyLab"
+  mkdir -p "$VIEW/XPolicyLab/policy"
+  for entry in "$DEXDOJO_ROOT/XPolicyLab"/*; do
+    name=$(basename "$entry")
+    [ "$name" = "policy" ] && continue
+    [[ -e "$VIEW/XPolicyLab/$name" ]] || ln -s "$entry" "$VIEW/XPolicyLab/$name"
+  done
+  for pol in "$DEXDOJO_ROOT/XPolicyLab/policy"/*; do
+    pname=$(basename "$pol")
+    [[ -e "$VIEW/XPolicyLab/policy/$pname" ]] || ln -s "$pol" "$VIEW/XPolicyLab/policy/$pname"
+  done
+fi
+rm -rf "$VIEW/XPolicyLab/policy/vitra_w0"
+mkdir -p "$VIEW/XPolicyLab/policy/vitra_w0"
+cp "$DEXDOJO_ROOT/XPolicyLab/policy/vitra_w0/__init__.py" \
+   "$DEXDOJO_ROOT/XPolicyLab/policy/vitra_w0/deploy.yml" \
+   "$VIEW/XPolicyLab/policy/vitra_w0/" 2>/dev/null || true
+cp "$REPO/evaluation/dexdojo/vitra_w0_deploy.py" \
+   "$VIEW/XPolicyLab/policy/vitra_w0/deploy.py"
+echo "[lanes] vitra_w0 driver patched in view"
+
 # ---- work queue --------------------------------------------------------------
 QUEUE="$OUT/queue/items.tsv"
 LOCK="$OUT/queue/lock"
