@@ -40,6 +40,7 @@ done
 : "${LINGBOT_DEXDOJO_STATS:?}" "${BASE_MODEL_PATH:?}"
 GPUS=${GPUS:-0}
 REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+EVAL_ROOT=${EVAL_ROOT:-$(dirname "$(dirname "$REPO")")}
 
 # The shared sim venv's editable installs point at /mnt/data/share/... (host
 # layout); DLC pods mount the CPFS at /cpfs — bridge the two (same fix the
@@ -173,8 +174,12 @@ run_lane() {  # $1 gpu  $2 lane_idx  $3 server_gpu
     (
       cd "$VIEW"
       # eval_policy.sh runs bare `python`; the Isaac sim venv must own it.
-      # Also prepend the zenity stub so Isaac's crash handler cannot wedge.
+      # Also prepend the zenity stub so Isaac's crash handler cannot wedge,
+      # and the pyarrow shadow: the shared sim venv's pyarrow 25 is missing
+      # pyarrow.vendored (breaks pandas -> open3d imports); an older wheel
+      # on PYTHONPATH shadows it cleanly.
       export PATH="$HOME/.cache/stub-bin:$(dirname "$DEXDOJO_SIM_PYTHON"):${PATH}"
+      export PYTHONPATH="$EVAL_ROOT/sim_pyarrow_fix:${PYTHONPATH:-}"
       export OMNI_KIT_ACCEPT_EULA=YES PYTHONUNBUFFERED=1
       setsid bash "$DEXDOJO_ROOT/scripts/eval_policy.sh" \
         --root_dir "$VIEW" \
