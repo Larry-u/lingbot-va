@@ -229,6 +229,12 @@ class LingbotRemoteModel:
 
     def _chunk_rows_env(self, env: _EnvState):
         self._connect()
+        print(f"[lingbot-bridge] get_action: initialized={env.initialized} "
+              f"obs_since_chunk={env.obs_since_chunk} "
+              f"keyframes={len(env.keyframes)} "
+              f"frame_st_chunk_shape="
+              f"{None if env.full_chunk is None else env.full_chunk.shape}",
+              flush=True)
         if not env.initialized:
             env.initialized = True
             env.prompt = prompt_of(env.latest_obs)
