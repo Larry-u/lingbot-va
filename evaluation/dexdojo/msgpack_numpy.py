@@ -59,3 +59,15 @@ packb = functools.partial(msgpack.packb, default=pack_array)
 
 Unpacker = functools.partial(msgpack.Unpacker, object_hook=unpack_array)
 unpackb = functools.partial(msgpack.unpackb, object_hook=unpack_array)
+
+
+# Compatibility aliases for the official msgpack_numpy package API: the
+# DexDojo checkout's PolicyServer imports this module when our bridge puts
+# evaluation/dexdojo ahead of it on sys.path, and it calls
+# msgpack_numpy.decode(...) on client frames.
+def decode(packed, **kwargs):
+    return unpackb(packed, **{k: v for k, v in kwargs.items() if k != "raw"})
+
+
+def encode(obj, **kwargs):
+    return Packer(**kwargs).pack(obj)
