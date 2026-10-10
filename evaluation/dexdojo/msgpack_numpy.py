@@ -61,13 +61,27 @@ Unpacker = functools.partial(msgpack.Unpacker, object_hook=unpack_array)
 unpackb = functools.partial(msgpack.unpackb, object_hook=unpack_array)
 
 
-# Compatibility aliases for the official msgpack_numpy package API: the
-# DexDojo checkout's PolicyServer imports this module when our bridge puts
-# evaluation/dexdojo ahead of it on sys.path, and it calls
-# msgpack_numpy.decode(...) on client frames.
-def decode(packed, **kwargs):
-    return unpackb(packed, **{k: v for k, v in kwargs.items() if k != "raw"})
-
-
+# Compatibility layer for the official msgpack_numpy wire format: the
+# DexDojo checkout's protocol codec imports this module when our bridge
+# puts evaluation/dexdojo ahead of it on sys.path. Its encode/decode are
+# dict<->ndarray conversions under the official marker keys (b"nd"/b"type"/
+# b"shape"/b"data"), NOT the __ndarray__ format used between the lingbot
+# client and the wan_va server (that pair is self-consistent below).
 def encode(obj, **kwargs):
-    return Packer(**kwargs).pack(obj)
+    if isinstance(obj, np.ndarray):
+        return {
+            b"nd": True,
+            b"type": obj.dtype.str,
+            b"kind": obj.dtype.kind.encode("ascii"),
+            b"shape": list(obj.shape),
+            b"data": obj.tobytes(),
+        }
+    return obj
+
+
+def decode(packed, **kwargs):
+    if isinstance(packed, dict) and packed.get(b"nd") is True:
+        arr = np.frombuffer(packed[b"data"],
+                            dtype=np.dtype(packed[b"type"]))
+        return arr.reshape(packed[b"shape"]).copy()
+    return unpack_array(packed)
